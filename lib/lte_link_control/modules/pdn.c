@@ -243,6 +243,8 @@ static void parse_cgev(const char *notif)
 
 		/* Parse <cid> or <cp_id> if present */
 		if ((*p == ' ') || (*(p - 1) == ' ')) {
+			struct pdn *pdn;
+
 			switch (evt.pdn.type) {
 			case LTE_LC_EVT_PDN_ACTIVATED:
 			case LTE_LC_EVT_PDN_DEACTIVATED:
@@ -251,6 +253,15 @@ static void parse_cgev(const char *notif)
 			case LTE_LC_EVT_PDN_SUSPENDED:
 			case LTE_LC_EVT_PDN_RESUMED:
 				evt.pdn.cid = (int8_t)strtoul(p, &p, 10);
+				/* Filter out untracked / unsolicited PDNs,
+				 * but always allow default PDN CID 0
+				 */
+				if (evt.pdn.cid != 0 && evt.pdn.cid != pdn_act_notif.cid) {
+					pdn = pdn_find(evt.pdn.cid);
+					if (!pdn) {
+						return;
+					}
+				}
 
 				break;
 			case LTE_LC_EVT_PDN_NETWORK_DETACH:
@@ -310,6 +321,7 @@ static void parse_cgev_apn_rate_ctrl(const char *notif)
 	char *p;
 	uint8_t apn_rate_ctrl_status;
 	struct lte_lc_evt evt = { 0 };
+	struct pdn *pdn;
 
 	/* +CGEV: APNRATECTRL STAT <cid>,<status>,[<time_remaining>] */
 	p = strstr(notif, "APNRATECTRL STAT");
@@ -323,6 +335,16 @@ static void parse_cgev_apn_rate_ctrl(const char *notif)
 
 	evt.pdn.cid = (uint8_t)strtoul(p, &p, 10);
 	__ASSERT(*p == ',', "Bad APNRATECTRL parsing");
+
+	/* Filter out untracked / unsolicited PDNs,
+	 * but always allow default PDN CID 0
+	 */
+	if (evt.pdn.cid != 0 && evt.pdn.cid != pdn_act_notif.cid) {
+		pdn = pdn_find(evt.pdn.cid);
+		if (!pdn) {
+			return;
+		}
+	}
 
 	/* Parse <status> */
 	apn_rate_ctrl_status = (uint8_t)strtoul(p + 1, NULL, 10);
